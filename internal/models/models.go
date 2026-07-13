@@ -9,7 +9,7 @@ import (
 type URL struct {
 	ID        uuid.UUID `json:"id"`
 	LongURL   string    `json:"long_url"`
-	ShortURL  string    `json:"short_url"`
+	ShortCode string    `json:"short_code"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
