@@ -4,6 +4,7 @@ go 1.25
 
 require (
 	github.com/google/uuid v1.4.0
+	github.com/ua-parser/uap-go v0.0.0-20260529044130-17c35e68e58c
 	github.com/wb-go/wbf v0.0.13
 )
 
@@ -17,6 +18,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.14.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
+	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/ilyakaznacheev/cleanenv v1.5.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
