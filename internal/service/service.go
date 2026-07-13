@@ -42,7 +42,7 @@ type Service struct {
 	repo URLRepository
 }
 
-func NewService(repository URLRepository) Service {
+func New(repository URLRepository) Service {
 	return Service{repo: repository}
 }
 
