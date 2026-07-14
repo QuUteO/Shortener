@@ -10,6 +10,7 @@ type Config struct {
 	Env      Env      `yaml:"env"`
 	Postgres Postgres `yaml:"postgres"`
 	Redis    Redis    `yaml:"redis"`
+	HTTP     HTTP     `yaml:"http"`
 }
 
 type Env struct {
@@ -30,6 +31,10 @@ type Redis struct {
 	Password string  `yaml:"password"`
 	Attempts int     `yaml:"attempts"`
 	Backoff  float64 `yaml:"backoff"`
+}
+
+type HTTP struct {
+	Addr string `yaml:"address"`
 }
 
 func Init(path string) (*Config, error) {

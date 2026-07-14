@@ -4,94 +4,155 @@ import (
 	"Shortener/internal/models"
 	"context"
 	"errors"
+	"fmt"
 
-	"github.com/wb-go/wbf/dbpg/pgx-driver"
+	"github.com/jackc/pgx/v5"
+	pgxdriver "github.com/wb-go/wbf/dbpg/pgx-driver"
 	"github.com/wb-go/wbf/redis"
-	"github.com/wb-go/wbf/retry"
 )
 
 type Repository struct {
-	conn     *pgxdriver.Postgres
-	redis    *redis.Client
-	strategy *retry.Strategy
+	conn  *pgxdriver.Postgres
+	redis *redis.Client
 }
 
 var (
-	ErrCreateURL     = errors.New("ошибка сохранения url в базу данных")
-	ErrSetUrl        = errors.New("ошибка сохранения url в базу данных")
-	ErrSaveToURL     = errors.New("ошибка сохранения полей в структуру URL")
-	ErrGetURLCache   = errors.New("ошибка получения значения из кеша")
-	ErrSaveClick     = errors.New("ошибка сохранения click")
-	ErrRowsGet       = errors.New("ошибка получения строк")
-	ErrScanClick     = errors.New("ошибка сканирования строк")
-	ErrIterationRows = errors.New("ошибка итерации по строкам")
+	ErrCreateURL   = errors.New("ошибка сохранения url")
+	ErrSetURL      = errors.New("ошибка сохранения url в redis")
+	ErrGetURL      = errors.New("url не найден")
+	ErrGetURLCache = errors.New("ошибка получения url из redis")
+
+	ErrSaveClick = errors.New("ошибка сохранения click")
+	ErrRows      = errors.New("ошибка получения строк")
+	ErrScanClick = errors.New("ошибка чтения click")
 )
 
-func NewRepository(conn *pgxdriver.Postgres, redis *redis.Client, strategy *retry.Strategy) *Repository {
+func New(conn *pgxdriver.Postgres, redis *redis.Client) *Repository {
 	return &Repository{
-		conn:     conn,
-		redis:    redis,
-		strategy: strategy,
+		conn:  conn,
+		redis: redis,
 	}
 }
 
 func (r *Repository) CreateURL(ctx context.Context, url *models.URL) error {
-	query := "INSERT INTO urls (id, long_url, short_code, created_at) VALUES ($1, $2, $3, $4)"
 
-	_, err := r.conn.Exec(ctx, query, url.ID, url.LongURL, url.ShortCode, url.CreatedAt)
+	query := `
+		INSERT INTO urls (
+			id,
+			long_url,
+			short_code,
+			created_at
+		)
+		VALUES ($1,$2,$3,$4)
+	`
+
+	_, err := r.conn.Exec(
+		ctx,
+		query,
+		url.ID,
+		url.LongURL,
+		url.ShortCode,
+		url.CreatedAt,
+	)
+
 	if err != nil {
-		return ErrCreateURL
+		return fmt.Errorf("%w: %v", ErrCreateURL, err)
 	}
 
 	return nil
 }
 
 func (r *Repository) GetURLByCode(ctx context.Context, shortCode string) (*models.URL, error) {
-	query := "SELECT id, long_url, short_code, created_at FROM urls WHERE short_code = $1"
+
+	query := `
+		SELECT
+			id,
+			long_url,
+			short_code,
+			created_at
+		FROM urls
+		WHERE short_code = $1
+	`
 
 	var url models.URL
-	err := r.conn.QueryRow(ctx, query, shortCode).Scan(&url.ID, &url.LongURL, &url.ShortCode, &url.CreatedAt)
+
+	err := r.conn.QueryRow(ctx, query, shortCode).Scan(
+		&url.ID,
+		&url.LongURL,
+		&url.ShortCode,
+		&url.CreatedAt,
+	)
+
 	if err != nil {
-		return nil, ErrSaveToURL
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrGetURL
+		}
+
+		return nil, fmt.Errorf("%w: %v", ErrGetURL, err)
 	}
 
 	return &url, nil
 }
 
 func (r *Repository) IsCodeExists(ctx context.Context, shortCode string) (bool, error) {
-	query := "SELECT EXISTS(SELECT 1 FROM urls WHERE short_code = $1)"
+
+	query := `
+		SELECT EXISTS(
+			SELECT 1
+			FROM urls
+			WHERE short_code = $1
+		)
+	`
 
 	var exists bool
+
 	err := r.conn.QueryRow(ctx, query, shortCode).Scan(&exists)
 	if err != nil {
-		return false, ErrSaveToURL
+		return false, err
 	}
 
 	return exists, nil
 }
 
-func (r *Repository) SetURLCache(ctx context.Context, url, shortCode string) error {
-	err := r.redis.Set(ctx, shortCode, url)
-	if err != nil {
-		return ErrSetUrl
+func (r *Repository) SetURLCache(ctx context.Context, shortCode, url string) error {
+
+	if err := r.redis.Set(ctx, shortCode, url); err != nil {
+		return fmt.Errorf("%w: %v", ErrSetURL, err)
 	}
 
 	return nil
 }
 
 func (r *Repository) GetURLCache(ctx context.Context, shortCode string) (string, error) {
+
 	value, err := r.redis.Get(ctx, shortCode)
 	if err != nil {
-		return "", ErrGetURLCache
+		return "", fmt.Errorf("%w: %v", ErrGetURLCache, err)
 	}
 
 	return value, nil
 }
 
 func (r *Repository) SaveClick(ctx context.Context, click *models.Click) error {
-	query := "INSERO INTO clicks (id, short_code, clicked_at, user_agent, device_type, browser, os, referrer) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
 
-	_, err := r.conn.Exec(ctx, query,
+	query := `
+		INSERT INTO clicks (
+			id,
+			short_code,
+			clicked_at,
+			user_agent,
+			device_type,
+			browser,
+			os,
+			referrer
+		)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+	`
+
+	_, err := r.conn.Exec(
+		ctx,
+		query,
 		click.ID,
 		click.ShortCode,
 		click.ClickedAt,
@@ -101,49 +162,64 @@ func (r *Repository) SaveClick(ctx context.Context, click *models.Click) error {
 		click.OS,
 		click.Referrer,
 	)
+
 	if err != nil {
-		return ErrSaveClick
+		return fmt.Errorf("%w: %v", ErrSaveClick, err)
 	}
 
 	return nil
 }
 
 func (r *Repository) GetClicksByCode(ctx context.Context, shortCode string) ([]models.Click, error) {
-	query := `SELECT id, short_code, clicked_at, user_agent, device_type, browser, os, referrer 
-	          FROM clicks 
-	          WHERE short_code = $1
-	          ORDER BY clicked_at DESC`
+
+	query := `
+		SELECT
+			id,
+			short_code,
+			clicked_at,
+			user_agent,
+			device_type,
+			browser,
+			os,
+			referrer
+		FROM clicks
+		WHERE short_code = $1
+		ORDER BY clicked_at DESC
+	`
 
 	rows, err := r.conn.Query(ctx, query, shortCode)
 	if err != nil {
-		return nil, ErrRowsGet
+		return nil, fmt.Errorf("%w: %v", ErrRows, err)
 	}
+
 	defer rows.Close()
 
-	var clicks []models.Click
+	clicks := make([]models.Click, 0)
 
 	for rows.Next() {
-		var c models.Click
+
+		var click models.Click
 
 		err := rows.Scan(
-			&c.ID,
-			&c.ShortCode,
-			&c.ClickedAt,
-			&c.UserAgent,
-			&c.DeviceType,
-			&c.Browser,
-			&c.OS,
-			&c.Referrer,
+			&click.ID,
+			&click.ShortCode,
+			&click.ClickedAt,
+			&click.UserAgent,
+			&click.DeviceType,
+			&click.Browser,
+			&click.OS,
+			&click.Referrer,
 		)
+
 		if err != nil {
-			return nil, ErrScanClick
+			return nil, fmt.Errorf("%w: %v", ErrScanClick, err)
 		}
 
-		clicks = append(clicks, c)
+		clicks = append(clicks, click)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, ErrIterationRows
+		return nil, err
 	}
 
 	return clicks, nil

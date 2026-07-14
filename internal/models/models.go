@@ -14,7 +14,7 @@ type URL struct {
 }
 
 type Click struct {
-	ID        uint64    `json:"id"`
+	ID        uuid.UUID `json:"id"`
 	ShortCode string    `json:"short_code"` // Индекс для связи с таблицей URL
 	ClickedAt time.Time `json:"clicked_at"` // Точное время клика (нужно для группировки по дням/месяцам)
 

@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	ErrParseBody            = errors.New("ошибка парса тела запроса")
-	ErrEmptyStringURl       = errors.New("пустая строка url")
-	ErrEmptyStringShortCode = errors.New("пустая строка short code")
-	ErrNotValidURL          = errors.New("невалидный url")
+	ErrParseBody      = errors.New("не удалось разобрать тело запроса")
+	ErrEmptyURL       = errors.New("url не может быть пустым")
+	ErrEmptyShortCode = errors.New("short code не может быть пустым")
+	ErrInvalidURL     = errors.New("некорректный url")
 )
 
 type URLService interface {
@@ -24,73 +24,101 @@ type URLService interface {
 	GetAnalytics(ctx context.Context, shortCode string) (*models.AnalyticsResponse, error)
 }
 
-type URlHandler struct {
+type URLHandler struct {
 	service URLService
 }
 
-func New(service URLService) URlHandler {
-	return URlHandler{service: service}
+func New(service URLService) *URLHandler {
+	return &URLHandler{
+		service: service,
+	}
 }
 
-func (h *URlHandler) CreateURL(c *ginext.Context) {
+func (h *URLHandler) CreateURL(c *ginext.Context) {
 	var req models.ShortenRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": ErrParseBody.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": ErrParseBody.Error(),
+		})
 		return
 	}
 
 	if req.LongURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": ErrEmptyStringURl.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": ErrEmptyURL.Error(),
+		})
 		return
 	}
 
-	validURL, err := url.ParseRequestURI(req.LongURL)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": ErrNotValidURL.Error()})
+	parsedURL, err := url.ParseRequestURI(req.LongURL)
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": ErrInvalidURL.Error(),
+		})
 		return
 	}
-	req.LongURL = validURL.String()
+
+	req.LongURL = parsedURL.String()
 
 	response, err := h.service.CreateURL(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
 		return
 	}
 
 	c.JSON(http.StatusCreated, response)
 }
 
-func (h *URlHandler) GetOriginalURL(c *gin.Context) {
+func (h *URLHandler) GetOriginalURL(c *ginext.Context) {
 	shortCode := c.Param("short_code")
 
 	if shortCode == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": ErrEmptyStringShortCode.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": ErrEmptyShortCode.Error(),
+		})
 		return
 	}
 
-	originalURL, err := h.service.GetOriginalURL(c.Request.Context(), shortCode, c.Request)
+	originalURL, err := h.service.GetOriginalURL(
+		c.Request.Context(),
+		shortCode,
+		c.Request,
+	)
+
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": err.Error(),
+		})
 		return
 	}
 
 	c.Redirect(http.StatusFound, originalURL)
 }
 
-func (h *URlHandler) GetAnalytics(c *gin.Context) {
+func (h *URLHandler) GetAnalytics(c *ginext.Context) {
 	shortCode := c.Param("short_code")
 
 	if shortCode == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": ErrEmptyStringShortCode.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": ErrEmptyShortCode.Error(),
+		})
 		return
 	}
 
-	analiticsResponce, err := h.service.GetAnalytics(c.Request.Context(), shortCode)
+	analyticsResponse, err := h.service.GetAnalytics(
+		c.Request.Context(),
+		shortCode,
+	)
+
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, analiticsResponce)
+	c.JSON(http.StatusOK, analyticsResponse)
 }

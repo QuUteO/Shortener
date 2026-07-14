@@ -1,7 +1,7 @@
 -- +goose Up
 -- Таблица для хранения ссылок
 CREATE TABLE IF NOT EXISTS urls (
-    id BIGSERIAL PRIMARY KEY,
+    id uuid PRIMARY KEY,
     long_url TEXT NOT NULL,
     short_code VARCHAR(255) NOT NULL UNIQUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS urls (
 
 -- Таблица для аналитики переходов
 CREATE TABLE IF NOT EXISTS clicks (
-    id BIGSERIAL PRIMARY KEY,
+    id uuid PRIMARY KEY,
     short_code VARCHAR(255) NOT NULL,
     clicked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     user_agent TEXT NOT NULL,
