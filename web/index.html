@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WB Shortener — Сервис сокращения ссылок</title>
+    <!-- Подключаем Tailwind CSS для красивого дизайна -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Подключаем Chart.js для отрисовки графиков в аналитике -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+<!-- Хедер -->
+<header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <span class="text-2xl"></span>
+            <span class="text-xl font-bold tracking-tight text-white">WB <span class="text-violet-500">Shortener</span></span>
+        </div>
+        <div class="text-sm text-slate-400">Быстро. Просто. Аналитично.</div>
+    </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-8 space-y-12">
+
+    <!-- СЕКЦИЯ 1: СОКРАЩАТЕЛЬ -->
+    <section class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 md:p-8 shadow-xl">
+        <h2 class="text-2xl font-bold mb-6 text-white flex items-center gap-2">
+            <span></span> Сократить новую ссылку
+        </h2>
+
+        <form id="shorten-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Длинная ссылка -->
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-slate-400 mb-1">Длинная ссылка (URL)</label>
+                    <input type="url" id="long-url" required placeholder="https://github.com/wb-go/wbf"
+                           class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition">
+                </div>
+                <!-- Кастомный код -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-1">Красивое имя (опционально)</label>
+                    <input type="text" id="custom-code" placeholder="my-repo"
+                           class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition">
+                </div>
+            </div>
+
+            <button type="submit"
+                    class="w-full md:w-auto px-8 py-3 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white font-medium rounded-lg shadow-lg shadow-violet-600/20 transition-all">
+                Сократить
+            </button>
+        </form>
+
+        <!-- Результат создания -->
+        <div id="result-box" class="hidden mt-6 p-4 bg-violet-950/40 border border-violet-800/50 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <span class="text-xs text-violet-400 font-bold tracking-wider uppercase block mb-1">Ваша короткая ссылка</span>
+                <a href="#" id="shortened-link" target="_blank" class="text-lg font-bold text-white hover:underline"></a>
+            </div>
+            <button onclick="copyLink()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-sm font-semibold rounded-lg transition">
+                Копировать
+            </button>
+        </div>
+    </section>
+
+    <!-- СЕКЦИЯ 2: ПОИСК АНАЛИТИКИ -->
+    <section class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 md:p-8 shadow-xl">
+        <h2 class="text-2xl font-bold mb-4 text-white flex items-center gap-2">
+            <span></span> Посмотреть аналитику
+        </h2>
+        <p class="text-slate-400 text-sm mb-6">Введите уникальный код короткой ссылки, чтобы увидеть детальную статистику переходов.</p>
+
+        <div class="flex gap-3 max-w-md">
+            <input type="text" id="analytics-code" placeholder="Код (например: my-repo)"
+                   class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition">
+            <button onclick="loadAnalytics()"
+                    class="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition">
+                Показать
+            </button>
+        </div>
+    </section>
+
+    <!-- СЕКЦИЯ 3: ДАШБОРД С АНАЛИТИКОЙ -->
+    <section id="analytics-dashboard" class="hidden space-y-8 animate-fade-in">
+        <div class="flex justify-between items-end border-b border-slate-800 pb-4">
+            <div>
+                <h3 class="text-3xl font-extrabold text-white" id="dashboard-title">Код: abc123</h3>
+                <p class="text-slate-400 text-sm">Полная сводка по трафику</p>
+            </div>
+            <div class="bg-violet-600/10 border border-violet-500/30 px-4 py-2 rounded-xl text-center">
+                <span class="text-xs text-violet-400 uppercase font-bold block">Всего переходов</span>
+                <span class="text-2xl font-black text-violet-400" id="total-clicks">0</span>
+            </div>
+        </div>
+
+        <!-- Сетки графиков -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- График по браузерам -->
+            <div class="bg-slate-800/40 p-6 border border-slate-700/50 rounded-xl">
+                <h4 class="text-sm font-semibold text-slate-400 mb-4">Популярные браузеры</h4>
+                <div class="h-[250px] flex items-center justify-center">
+                    <canvas id="browserChart"></canvas>
+                </div>
+            </div>
+
+            <!-- График по устройствам -->
+            <div class="bg-slate-800/40 p-6 border border-slate-700/50 rounded-xl">
+                <h4 class="text-sm font-semibold text-slate-400 mb-4">Типы устройств</h4>
+                <div class="h-[250px] flex items-center justify-center">
+                    <canvas id="deviceChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Таблица последних кликов -->
+        <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl overflow-hidden">
+            <div class="p-6 border-b border-slate-700/50">
+                <h4 class="text-lg font-bold text-white">Последние 20 переходов</h4>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                    <tr class="bg-slate-900/50 text-slate-400 text-xs uppercase font-bold border-b border-slate-700/50">
+                        <th class="p-4">Время</th>
+                        <th class="p-4">Браузер</th>
+                        <th class="p-4">ОС</th>
+                        <th class="p-4">Устройство</th>
+                        <th class="p-4">Откуда переход (Referrer)</th>
+                    </tr>
+                    </thead>
+                    <tbody id="clicks-table-body" class="divide-y divide-slate-800 text-sm">
+                    <!-- Сюда вставятся строки -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<footer class="max-w-5xl mx-auto px-4 py-8 border-t border-slate-800 text-center text-xs text-slate-500">
+    &copy; 2026 WB Shortener. Разработано на Go.
+</footer>
+
+<!-- Скрипты взаимодействия с бэкендом -->
+<script>
+    const API_BASE = "http://localhost:8080"; // Поменяй, если бэкенд на другом порту
+    let browserChartInstance = null;
+    let deviceChartInstance = null;
+
+    // 1. Создание короткой ссылки
+    document.getElementById("shorten-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const longURL = document.getElementById("long-url").value;
+        const customCode = document.getElementById("custom-code").value;
+
+        try {
+            const response = await fetch(`${API_BASE}/shorten`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    long_url: longURL,
+                    custom_code: customCode || undefined
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || "Неизвестная ошибка сервера");
+            }
+
+            const data = await response.json();
+
+            // Отображаем результат
+            const resultBox = document.getElementById("result-box");
+            const shortenedLink = document.getElementById("shortened-link");
+
+            // В твоем бэкенде ShortURL возвращается как http://localhost:8080/s/код
+            shortenedLink.href = data.short_url;
+            shortenedLink.innerText = data.short_url;
+            resultBox.classList.remove("hidden");
+
+        } catch (err) {
+            alert("Ошибка при сокращении: " + err.message);
+        }
+    });
+
+    // 2. Копирование в буфер
+    function copyLink() {
+        const linkText = document.getElementById("shortened-link").innerText;
+        navigator.clipboard.writeText(linkText);
+        alert("Ссылка скопирована!");
+    }
+
+    // 3. Загрузка и рендер аналитики
+    async function loadAnalytics() {
+        const code = document.getElementById("analytics-code").value.trim();
+        if (!code) {
+            alert("Введите код ссылки!");
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/analytics/${code}`);
+            if (!response.ok) {
+                throw new Error("Ссылка не найдена или ошибка на сервере");
+            }
+
+            const data = await response.json();
+            renderDashboard(data);
+
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    // 4. Отрисовка Дашборда и Графиков
+    function renderDashboard(data) {
+        document.getElementById("analytics-dashboard").classList.remove("hidden");
+        document.getElementById("dashboard-title").innerText = `Код: ${data.short_code}`;
+        document.getElementById("total-clicks").innerText = data.total_clicks;
+
+        // Отрисовка графика браузеров
+        renderPieChart("browserChart", data.by_browser, browserChartInstance, (instance) => browserChartInstance = instance);
+
+        // Отрисовка графика устройств
+        renderPieChart("deviceChart", data.by_device, deviceChartInstance, (instance) => deviceChartInstance = instance);
+
+        // Заполнение таблицы последних кликов
+        const tbody = document.getElementById("clicks-table-body");
+        tbody.innerHTML = "";
+
+        if (!data.recent_clicks || data.recent_clicks.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">Переходов пока не зафиксировано</td></tr>`;
+            return;
+        }
+
+        data.recent_clicks.forEach(click => {
+            const row = document.createElement("tr");
+            row.className = "hover:bg-slate-800/20 transition-colors";
+
+            const formattedDate = new Date(click.clicked_at).toLocaleString('ru-RU');
+            const referrer = click.referrer || "Прямой переход";
+
+            row.innerHTML = `
+                    <td class="p-4 text-slate-300">${formattedDate}</td>
+                    <td class="p-4"><span class="px-2 py-1 bg-slate-700 text-xs rounded">${click.browser}</span></td>
+                    <td class="p-4">${click.os}</td>
+                    <td class="p-4 text-slate-400">${click.device_type}</td>
+                    <td class="p-4 text-xs text-slate-400 max-w-xs truncate" title="${referrer}">${referrer}</td>
+                `;
+            tbody.appendChild(row);
+        });
+    }
+
+    // Хелпер создания круговых диаграмм
+    function renderPieChart(canvasId, dataMap, oldInstance, saveInstanceCallback) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+
+        // Если график уже существовал — уничтожаем его перед перерисовкой
+        if (oldInstance) {
+            oldInstance.destroy();
+        }
+
+        const labels = Object.keys(dataMap || {});
+        const values = Object.values(dataMap || {});
+
+        if (labels.length === 0) {
+            labels.push("Нет данных");
+            values.push(1);
+        }
+
+        const newInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: [
+                        'rgba(139, 92, 246, 0.7)', // Violet
+                        'rgba(236, 72, 153, 0.7)', // Pink
+                        'rgba(20, 184, 166, 0.7)', // Teal
+                        'rgba(245, 158, 11, 0.7)', // Amber
+                        'rgba(59, 130, 246, 0.7)'  // Blue
+                    ],
+                    borderColor: '#1e293b',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+
+        saveInstanceCallback(newInstance);
+    }
+</script>
+</body>
+</html>
