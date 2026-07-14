@@ -2,12 +2,16 @@ package main
 
 import (
 	config "Shortener/internal"
+	"Shortener/internal/handler"
+	"Shortener/internal/repository"
+	"Shortener/internal/service"
 	"context"
 	"fmt"
 	"os"
 	"time"
 
 	pgxdriver "github.com/wb-go/wbf/dbpg/pgx-driver"
+	"github.com/wb-go/wbf/ginext"
 	"github.com/wb-go/wbf/logger"
 	"github.com/wb-go/wbf/redis"
 )
@@ -17,11 +21,11 @@ func main() {
 
 	cfg, err := config.Init("./config.yaml")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка инициализации конфига: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ошибка загрузки конфигурации: %v\n", err)
 		os.Exit(1)
 	}
 
-	logger, err := logger.InitLogger(
+	log, err := logger.InitLogger(
 		logger.ZapEngine,
 		"Shortener",
 		cfg.Env.Env,
@@ -29,38 +33,66 @@ func main() {
 		logger.WithRotation("logs/app.log", 100, 5, 30),
 	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка инициализации логера: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ошибка инициализации логгера: %v\n", err)
 		os.Exit(1)
 	}
 
 	pg, err := pgxdriver.New(
 		cfg.Postgres.DatabaseDSN,
-		logger,
+		log,
 		pgxdriver.MaxPoolSize(50),
 		pgxdriver.MaxConnAttempts(5),
 		pgxdriver.BaseRetryDelay(100*time.Millisecond),
 	)
 	if err != nil {
-		logger.Error("Ошибка инициализации базы данных", "error", err)
+		log.Error("ошибка подключения к PostgreSQL", "error", err)
 		os.Exit(1)
 	}
 	defer pg.Close()
 
 	if err := pg.Ping(ctx); err != nil {
-		logger.Error("Ошибка пинга базы данных", "error", err)
+		log.Error("PostgreSQL недоступен", "error", err)
+		os.Exit(1)
 	}
 
-	logger.Info("Успешный запуск и проверка базы данных")
+	log.Info("PostgreSQL подключен")
 
-	client := redis.New(cfg.Redis.Addr, cfg.Redis.Password, 0)
-	defer client.Close()
+	cache := redis.New(
+		cfg.Redis.Addr,
+		cfg.Redis.Password,
+		0,
+	)
+	defer cache.Close()
 
-	if err := client.Ping(ctx); err != nil {
-		logger.Error("Ошибка пинга кеша", "error", err)
+	if err := cache.Ping(ctx); err != nil {
+		log.Error("Redis недоступен", "error", err)
+		os.Exit(1)
 	}
 
-	logger.Info("Успешный запуск и проверка кеша")
+	log.Info("Redis подключен")
 
-	// strategy := retry.Strategy{Attempts: cfg.Redis.Attempts, Delay: 5 * time.Second, Backoff: cfg.Redis.Backoff}
+	repo := repository.New(pg, cache)
+	srv := service.New(repo)
+	urlHandler := handler.New(srv)
 
+	router := ginext.New("debug")
+
+	router.Use(
+		ginext.Logger(),
+		ginext.Recovery(),
+	)
+
+	router.GET("/", func(c *ginext.Context) {
+		c.File("web/index.html")
+	})
+	router.POST("/shorten", urlHandler.CreateURL)
+	router.GET("/s/:short_code", urlHandler.GetOriginalURL)
+	router.GET("/analytics/:short_code", urlHandler.GetAnalytics)
+
+	log.Info("HTTP server started", "addr", cfg.HTTP.Addr)
+
+	if err := router.Run(cfg.HTTP.Addr); err != nil {
+		log.Error("ошибка запуска HTTP сервера", "error", err)
+		os.Exit(1)
+	}
 }
